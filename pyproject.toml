@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "hdcc"
+version = "0.1.0"
+description = ""
+authors = ["Yifan Yang <yyang29@stanford.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.3.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
