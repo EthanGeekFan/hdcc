@@ -25,17 +25,26 @@ class Operator(Enum):
     PERMUTATION = "PERMUTATION"
     FRAC_BIND = "FRAC_BIND"
 
-    def support(self, a: type, b: type) -> type:
+    def support(self, types: list[type]) -> type:
         support_entry = supportted_types[self]
-        if issubclass(a, support_entry[0]) and issubclass(b, support_entry[1]):
-            if issubclass(a, Types.HyperVector):
-                return a
-            elif issubclass(b, Types.HyperVector):
-                return b
-            else:
-                return support_entry[2]
+        if self == Operator.BUNDlE:
+            # bundle takes variable number of arguments
+            for i in range(len(types)):
+                if not issubclass(types[i], Types.HyperVector):
+                    raise Exception("Unsupported type " + str(types[i]) + " for operator " + str(self))
+            return types[0]
         else:
-            raise Exception("Unsupported type combination " + str(a) + " and " + str(b) + " for operator " + str(self))
+            if len(types) != len(support_entry) - 1:
+                raise Exception("Unsupported number of arguments " + str(len(types)) + " for operator " + str(self))
+            for i in range(len(types)):
+                if not issubclass(types[i], support_entry[i]):
+                    raise Exception("Unsupported type " + str(types[i]) + " for operator " + str(self))
+            if issubclass(types[0], Types.HyperVector):
+                return types[0]
+            elif issubclass(types[1], Types.HyperVector):
+                return types[1]
+            else:
+                return support_entry[-1]
     pass
 
 
@@ -49,79 +58,84 @@ supportted_types = {
 
 
 class Expression:
-    a: Expression | str | int | float | Types.HyperVector
-    aType: type
+    # a: Expression | str | int | float | Types.HyperVector
+    # aType: type
     op: Operator
-    b: Expression | str | int | float | Types.HyperVector
-    bType: type
+    # b: Expression | str | int | float | Types.HyperVector
+    # bType: type
     outType: type
+    operands: list[Expression | str | int | float | Types.HyperVector]
+    types: list[type]
 
-    def __init__(self, a: Expression | str | int | float | Types.HyperVector, op: Operator, b: Expression | str | int | float | Types.HyperVector, program: HDProg = None):
-        self.a = a
+    def __init__(self, op: Operator, operands: list[Expression | str | int | float | Types.HyperVector], program: HDProg = None):
         self.op = op
-        self.b = b
+        self.operands = operands
+        self.types = []
         # parse types
-        if isinstance(a, Expression):
-            self.aType = a.outType
-        elif isinstance(a, str):
-            if program is None:
-                raise Exception("Program is required for symbol type inference")
-            self.aType = program.getSymbolType(a)
-        else:
-            self.aType = type(a)
-        if isinstance(b, Expression):
-            self.bType = b.outType
-        elif isinstance(b, str):
-            if program is None:
-                raise Exception("Program is required for symbol type inference")
-            self.bType = program.getSymbolType(b)
-        else:
-            self.bType = type(b)
+        for i in range(len(operands)):
+            if isinstance(operands[i], Expression):
+                self.types.append(operands[i].outType)
+            elif isinstance(operands[i], str):
+                if program is None:
+                    raise Exception("Program is required for symbol type inference")
+                self.types.append(program.getSymbolType(operands[i]))
+            else:
+                self.types.append(type(operands[i]))
         self.typecheck()
         pass
 
     def __str__(self):
-        return "Expression(" + str(self.a) + " " + str(self.op) + " " + str(self.b) + ")"
+        return "Expression(" + str(self.op) + ", " + str(self.operands) + ")"
     
     def typecheck(self):
-        self.outType = self.op.support(self.aType, self.bType)
+        self.outType = self.op.support(self.types)
         pass
 
     def eval(self, state: HDProgState):
-        if isinstance(self.a, Expression):
-            a = self.a.eval(state)
-        elif isinstance(self.a, str):
-            # type check
-            if self.a not in state.val_table:
-                raise Exception("Symbol " + self.a + " not found")
-            if not issubclass(state.val_table[self.a][1], self.aType):
-                raise Exception("Symbol " + self.a + " is not of type " + str(self.aType))
-            a = state.val_table[self.a][3]
+        if not self.op == Operator.BUNDlE:
+            if isinstance(self.operands[0], Expression):
+                self.operands[0] = self.operands[0].eval(state)
+            elif isinstance(self.operands[0], str):
+                # type check
+                if self.operands[0] not in state.val_table:
+                    raise Exception("Symbol " + self.operands[0] + " not found")
+                if not issubclass(state.val_table[self.operands[0]][1], self.types[0]):
+                    raise Exception("Symbol " + self.operands[0] + " is not of type " + str(self.types[0]))
+                self.operands[0] = state.val_table[self.operands[0]][3]
+            if isinstance(self.operands[1], Expression):
+                self.operands[1] = self.operands[1].eval(state)
+            elif isinstance(self.operands[1], str):
+                # type check
+                if self.operands[1] not in state.val_table:
+                    raise Exception("Symbol " + self.operands[1] + " not found")
+                if not issubclass(state.val_table[self.operands[1]][1], self.types[1]):
+                    raise Exception("Symbol " + self.operands[1] + " is not of type " + str(self.types[1]))
+                self.operands[1] = state.val_table[self.operands[1]][3]
+            if self.op == Operator.BIND:
+                return self.operands[0].bind(self.operands[1])
+            elif self.op == Operator.UNBIND:
+                return self.operands[0].unbind(self.operands[1])
+            elif self.op == Operator.PERMUTATION:
+                return self.operands[0].permutation(self.operands[1])
+            elif self.op == Operator.FRAC_BIND:
+                return self.operands[0].frac_bind(self.operands[1])
+            else:
+                raise Exception("Unsupported operator " + str(self.op))
         else:
-            a = self.a
-        if isinstance(self.b, Expression):
-            b = self.b.eval(state)
-        elif isinstance(self.b, str):
-            # type check
-            if self.b not in state.val_table:
-                raise Exception("Symbol " + self.b + " not found")
-            if not issubclass(state.val_table[self.b][1], self.bType):
-                raise Exception("Symbol " + self.b + " is not of type " + str(self.bType))
-            b = state.val_table[self.b][3]
-        else:
-            b = self.b
-        if self.op == Operator.BIND:
-            return a.bind(b)
-        elif self.op == Operator.UNBIND:
-            return a.unbind(b)
-        elif self.op == Operator.BUNDlE:
-            return a.bundle(b)
-        elif self.op == Operator.PERMUTATION:
-            return a.permutation(b)
-        elif self.op == Operator.FRAC_BIND:
-            return a.frac_bind(b)
-        else:
-            raise Exception("Unsupported operator " + str(self.op))
+            vals = []
+            for i in range(len(self.operands)):
+                if isinstance(self.operands[i], Expression):
+                    vals.append(self.operands[i].eval(state))
+                elif isinstance(self.operands[i], str):
+                    # type check
+                    if self.operands[i] not in state.val_table:
+                        raise Exception("Symbol " + self.operands[i] + " not found")
+                    if not issubclass(state.val_table[self.operands[i]][1], self.types[i]):
+                        raise Exception("Symbol " + self.operands[i] + " is not of type " + str(self.types[i]))
+                    vals.append(state.val_table[self.operands[i]][3])
+                else:
+                    vals.append(self.operands[i])
+            return self.outType.bundle(vals)
     pass
 
 
@@ -154,16 +168,16 @@ class HDSymbolType(Enum):
 
 class HDProg:
     # HDProg is a class that represents a HDC program
-    inputs: dict = {}
-    outputs: dict = {}
-    params: dict = {}
-    local_vars: dict = {}
-    variables: dict = {}
-    constants: dict = {}
-    statements: list = []
-    symbols: dict = {}
 
     def __init__(self):
+        self.inputs: dict = {}
+        self.outputs: dict = {}
+        self.params: dict = {}
+        self.local_vars: dict = {}
+        self.variables: dict = {}
+        self.constants: dict = {}
+        self.statements: list = []
+        self.symbols: dict = {}
         pass
 
     def add_symbol(self, sym_type: HDSymbolType, identifier, value):
@@ -227,7 +241,8 @@ class HDProg:
         self.statements.append((StatementType.DECL_CONST, type, identifier, value))
         if isinstance(value, Types.HyperVector):
             self.add_symbol(HDSymbolType.CONST, identifier, (type, value.dim, value))
-        self.add_symbol(HDSymbolType.CONST, identifier, (type, None, value))
+        else:
+            self.add_symbol(HDSymbolType.CONST, identifier, (type, None, value))
 
     def assign(self, lhs: str, rhs: Union[Expression, str, int, float, Types.HyperVector]):
         rhs_type = type(rhs)
@@ -277,7 +292,7 @@ class HDProg:
         
 
     def step(self, state: HDProgState, args: dict):
-        print("PC: " + str(state.pc) + " " + str(self.statements[state.pc]))
+        # print("PC: " + str(state.pc) + " " + str(self.statements[state.pc]))
         if state.pc == 0:
             # plug in arguments/inputs
             for k in self.inputs.keys():
@@ -366,19 +381,19 @@ class HDProg:
         return t
     
     def bind(self, a: Operand, b: Operand) -> Expression:
-        return Expression(a, Operator.BIND, b, self)
+        return Expression(Operator.BIND, [a, b], self)
     
     def unbind(self, a: Operand, b: Operand) -> Expression:
-        return Expression(a, Operator.UNBIND, b, self)
+        return Expression(Operator.UNBIND, [a, b], self)
 
-    def bundle(self, a: Operand, b: Operand) -> Expression:
-        return Expression(a, Operator.BUNDlE, b, self)
+    def bundle(self, *operands: Operand) -> Expression:
+        return Expression(Operator.BUNDlE, list(operands), self)
 
     def permutation(self, a: Operand, b: Operand) -> Expression:
-        return Expression(a, Operator.PERMUTATION, b, self)
+        return Expression(Operator.PERMUTATION, [a, b], self)
 
     def frac_bind(self, a: Operand, b: Operand) -> Expression:
-        return Expression(a, Operator.FRAC_BIND, b, self)
+        return Expression(Operator.FRAC_BIND, [a, b], self)
         
     def __str__(self):
         string = ""

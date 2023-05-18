@@ -54,13 +54,15 @@ class HV_FHRR(HyperVector):
         data = other.data - self.data
         return HV_FHRR(self.dim, data)
     
-    def bundle(self, other: HV_FHRR) -> HV_FHRR:
-        # bundle two vectors
+    @staticmethod
+    def bundle(vectors: list[HV_FHRR]) -> HV_FHRR:
+        # bundle multiple vectors
         # angles of element addition
         # convert the angles to unit complex exponential then add then convert back to angles
-        assert self.dim == other.dim
-        data = np.angle(np.exp(1j * self.data) + np.exp(1j * other.data))
-        return HV_FHRR(self.dim, data)
+        dim = vectors[0].dim
+        assert all([v.dim == dim for v in vectors])
+        data = np.angle(np.sum(np.exp(1j * np.array([v.data for v in vectors])), axis=0))
+        return HV_FHRR(dim, data)
     
     def frac_bind(self, frac: float) -> HV_FHRR:
         # bind vector with real number
