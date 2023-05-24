@@ -45,14 +45,28 @@ class HV_FHRR(HyperVector):
         # bind two vectors
         assert self.dim == other.dim
         data = self.data + other.data
-        return HV_FHRR(self.dim, data)
+        res = HV_FHRR(self.dim, data)
+        HV_FHRR.wrap_vector(res)
+        HV_FHRR.check_range([res])
+        return res
     
     def unbind(self, other: HV_FHRR) -> HV_FHRR:
         # unbind two vectors
         # TODO: check if this is correct
         assert self.dim == other.dim
         data = other.data - self.data
-        return HV_FHRR(self.dim, data)
+        res = HV_FHRR(self.dim, data)
+        HV_FHRR.wrap_vector(res)
+        HV_FHRR.check_range([res])
+        return res
+    
+    @staticmethod
+    def check_range(vectors: list[HV_FHRR]):
+        # assert all data in v is between -pi and pi
+        if not all([np.all(v.data >= -np.pi) and np.all(v.data <= np.pi) for v in vectors]):
+            for v in vectors:
+                print(v)
+            raise Exception("Data in vectors must be between -pi and pi")
     
     @staticmethod
     def bundle(vectors: list[HV_FHRR]) -> HV_FHRR:
@@ -60,14 +74,29 @@ class HV_FHRR(HyperVector):
         # angles of element addition
         # convert the angles to unit complex exponential then add then convert back to angles
         dim = vectors[0].dim
+        HV_FHRR.check_range(vectors)
         assert all([v.dim == dim for v in vectors])
-        data = np.angle(np.sum(np.exp(1j * np.array([v.data for v in vectors])), axis=0))
-        return HV_FHRR(dim, data)
+        # data = np.angle(np.sum(np.exp(1j * np.array([v.data for v in vectors])), axis=0))
+        vectors = np.array([v.data for v in vectors])
+        data = np.arctan2(np.sum(np.sin(vectors), axis=0), np.sum(np.cos(vectors), axis=0))
+        res =  HV_FHRR(dim, data)
+        HV_FHRR.wrap_vector(res)
+        return res
+    
+    @staticmethod
+    def wrap_vector(v: HV_FHRR):
+        # wrap vector to [-pi, pi)
+        while np.any(v.data > np.pi) or np.any(v.data < -np.pi):
+            v.data = np.where(v.data > np.pi, v.data - 2 * np.pi, v.data)
+            v.data = np.where(v.data < -np.pi, v.data + 2 * np.pi, v.data)
     
     def frac_bind(self, frac: float) -> HV_FHRR:
         # bind vector with real number
         data = frac * self.data
-        return HV_FHRR(self.dim, data)
+        res = HV_FHRR(self.dim, data)
+        HV_FHRR.wrap_vector(res)
+        HV_FHRR.check_range([res])
+        return res
 
 
 class HV_HRR(HyperVector):

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hdcc"
-version = "0.6.0"
+version = "0.6.3"
 description = ""
 authors = ["Yifan Yang <yyang29@stanford.edu>"]
 readme = "README.md"
