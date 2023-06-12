@@ -60,12 +60,12 @@ supportted_types = {
 class Expression:
     # a: Expression | str | int | float | Types.HyperVector
     # aType: type
-    op: Operator
+    # op: Operator
     # b: Expression | str | int | float | Types.HyperVector
     # bType: type
-    outType: type
-    operands: list[Expression | str | int | float | Types.HyperVector]
-    types: list[type]
+    # outType: type
+    # operands: list[Expression | str | int | float | Types.HyperVector]
+    # types: list[type]
 
     def __init__(self, op: Operator, operands: list[Expression | str | int | float | Types.HyperVector], program: HDProg = None):
         self.op = op
@@ -92,33 +92,34 @@ class Expression:
         pass
 
     def eval(self, state: HDProgState):
+        vals = [0 for _ in range(len(self.operands))]
         if not self.op == Operator.BUNDlE:
             if isinstance(self.operands[0], Expression):
-                self.operands[0] = self.operands[0].eval(state)
+                vals[0] = self.operands[0].eval(state)
             elif isinstance(self.operands[0], str):
                 # type check
                 if self.operands[0] not in state.val_table:
                     raise Exception("Symbol " + self.operands[0] + " not found")
                 if not issubclass(state.val_table[self.operands[0]][1], self.types[0]):
                     raise Exception("Symbol " + self.operands[0] + " is not of type " + str(self.types[0]))
-                self.operands[0] = state.val_table[self.operands[0]][3]
+                vals[0] = state.val_table[self.operands[0]][3]
             if isinstance(self.operands[1], Expression):
-                self.operands[1] = self.operands[1].eval(state)
+                vals[1] = self.operands[1].eval(state)
             elif isinstance(self.operands[1], str):
                 # type check
                 if self.operands[1] not in state.val_table:
                     raise Exception("Symbol " + self.operands[1] + " not found")
                 if not issubclass(state.val_table[self.operands[1]][1], self.types[1]):
                     raise Exception("Symbol " + self.operands[1] + " is not of type " + str(self.types[1]))
-                self.operands[1] = state.val_table[self.operands[1]][3]
+                vals[1] = state.val_table[self.operands[1]][3]
             if self.op == Operator.BIND:
-                return self.operands[0].bind(self.operands[1])
+                return vals[0].bind(vals[1])
             elif self.op == Operator.UNBIND:
-                return self.operands[0].unbind(self.operands[1])
+                return vals[0].unbind(vals[1])
             elif self.op == Operator.PERMUTATION:
-                return self.operands[0].permutation(self.operands[1])
+                return vals[0].permutation(vals[1])
             elif self.op == Operator.FRAC_BIND:
-                return self.operands[0].frac_bind(self.operands[1])
+                return vals[0].frac_bind(vals[1])
             else:
                 raise Exception("Unsupported operator " + str(self.op))
         else:
@@ -145,9 +146,6 @@ Operand = Union[Expression, str, int, float, Types.HyperVector]
 # Definition of HDProg class
 
 class HDProgState:
-    val_table: dict = {}
-    pc = 0
-
     def __init__(self, val_table: dict = None, pc: int = 0):
         if val_table is not None:
             self.val_table = val_table
